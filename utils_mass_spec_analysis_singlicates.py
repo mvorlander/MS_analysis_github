@@ -31,8 +31,8 @@ class MassSpecPreprocessing:
         genes_col_letter,
         accession_col_letter,
         description_col_letter,
-        required_path=r"\\storage.imp.ac.at\groups\plaschka\shared\data\mass-spec"
-
+        required_path=r"\\storage.imp.ac.at\groups\plaschka\shared\data\mass-spec",
+        exclude_contaminants=True  # New flag: exclude proteins whose Accession starts with "cont_"
     ):
         """
         Initialize all paths and parameters needed for preprocessing.
@@ -46,6 +46,7 @@ class MassSpecPreprocessing:
         self.accession_col_letter = accession_col_letter
         self.description_col_letter = description_col_letter
         self.required_path = required_path
+        self.exclude_contaminants = exclude_contaminants  # Store the new flag
 
         # Internal attributes that will be set during processing
         self.mass_spec_data_full_headers = None
@@ -190,11 +191,14 @@ class MassSpecPreprocessing:
     def on_apply_button_clicked(self, _):
         """
         Event handler for the "Apply New Names & Rebuild Data" button.
+        It rebuilds the abundance DataFrame, processes multi‐ID accessions without duplicating rows,
+        and merges with the POI data using the first matching accession.
+        Also, if configured, it excludes proteins whose Accession starts with "cont_".
         """
         with self.apply_output:
             clear_output()  # Clear previous messages
 
-            # Re-load the JSON mapping and rebuild final names, using a default if needed.
+            # Re-load the JSON mapping and rebuild final names.
             rename_map = self.load_rename_map(self.json_file_path) or {}
             final_names = [rename_map.get(old_nm, old_nm) for old_nm in self.sample_names_extracted]
             self.abundance_cols = final_names  # these are the new sample names
@@ -209,15 +213,43 @@ class MassSpecPreprocessing:
             self.mass_spec_abundance["Genes"] = self.genes_column
             self.mass_spec_abundance["Description"] = self.description_column
 
-            # Re-merge with POI data.
-            poi_data = pd.read_excel(self.poi_file_path)
+            # Convert Accession to string.
             self.mass_spec_abundance["Accession"] = self.mass_spec_abundance["Accession"].astype(str)
+
+            # Optionally exclude contaminants whose Accession starts with "cont_"
+            if self.exclude_contaminants:
+                self.mass_spec_abundance = self.mass_spec_abundance[
+                    ~self.mass_spec_abundance["Accession"].str.lower().str.startswith("cont_")
+                ]
+
+            # Process multi-ID accessions: create a list and select first match
+            self.mass_spec_abundance["Accession_list"] = (
+                self.mass_spec_abundance["Accession"]
+                .str.split(';')
+                .apply(lambda lst: [x.strip() for x in lst])
+            )
+
+            # Load POI data and prepare for merge
+            poi_data = pd.read_excel(self.poi_file_path)
             poi_data["Other UniProt Accessions"] = poi_data["Other UniProt Accessions"].astype(str)
             poi_data_exploded = poi_data.assign(
                 **{"Other UniProt Accessions": poi_data["Other UniProt Accessions"].str.split(',')}
             ).explode("Other UniProt Accessions")
-            poi_data_exploded["Other UniProt Accessions"] = poi_data_exploded["Other UniProt Accessions"].astype(str)
+            poi_data_exploded["Other UniProt Accessions"] = poi_data_exploded["Other UniProt Accessions"].astype(str).str.strip()
 
+            # Get valid POI IDs
+            poi_ids = set(poi_data_exploded["Other UniProt Accessions"].unique())
+
+            # For each row, pick the first accession that is in the POI file.
+            def find_match(accession_list):
+                for acc in accession_list:
+                    if acc in poi_ids:
+                        return acc
+                return np.nan
+
+            self.mass_spec_abundance["Matched_Accession"] = self.mass_spec_abundance["Accession_list"].apply(find_match)
+
+            # Merge with POI and color data using Matched_Accession
             def generate_color_palette(classes):
                 pal = sns.color_palette("husl", len(classes))
                 return {cls: mcolors.to_hex(pal[i]) for i, cls in enumerate(classes)}
@@ -242,11 +274,12 @@ class MassSpecPreprocessing:
                 pd.DataFrame(list(self.color_map.items()), columns=["Class / family", "Color Hex"]),
                 on="Class / family", how="left"
             )
+
             self.merged_data = pd.merge(
                 self.mass_spec_abundance,
                 poi_with_colors,
                 how="left",
-                left_on="Accession",
+                left_on="Matched_Accession",
                 right_on="Other UniProt Accessions"
             )
 
@@ -772,7 +805,8 @@ def show_ranked_abundance_plot(fig_widget, sorted_data, col_log_name, condition,
             return
         mask = (
             sorted_data['Genes'].str.contains(query, case=False, na=False) |
-            sorted_data['Accession'].str.contains(query, case=False, na=False)
+            sorted_data['Accession'].str.contains(query, case=False, na=False) | 
+            sorted_data['Description'].str.contains(query, case=False, na=False) 
         )
         matched_data = sorted_data[mask]
         if matched_data.empty:
@@ -1097,7 +1131,8 @@ def show_log2_fc_plot(
             return
         mask = (
             sorted_data['Genes'].str.contains(query, case=False, na=False) |
-            sorted_data['Accession'].str.contains(query, case=False, na=False)
+            sorted_data['Accession'].str.contains(query, case=False, na=False) | 
+            sorted_data['Description'].str.contains(query, case=False, na=False)
         )
         matched = sorted_data[mask]
         if matched.empty:
