@@ -956,17 +956,19 @@ def create_log2_fc_figure_widget(
     if hover_fields is None:
         hover_fields = ['Genes', 'Description', 'Accession']
     # Build hover text for background trace
+        # Build hover text for all proteins
     hover_text_bg = sorted_data[hover_fields].astype(str).apply(lambda row: "<br>".join(row), axis=1)
-    non_cls = sorted_data[~sorted_data['Class / family'].isin(classes_to_highlight)]
+    # Base layer: plot all proteins
     fig_widget.add_scatter(
-        x=non_cls['x_jitter'],
-        y=non_cls[col_fc],
+        x=sorted_data['x_jitter'],
+        y=sorted_data[col_fc],
         mode='markers',
         marker=dict(color='#D3D3D3', size=6, opacity=0.4),
-        name='Other Proteins',
+        name='All Proteins (BG)',
         hovertext=hover_text_bg,
         hoverinfo='text'
     )
+
     for cls in classes_to_highlight:
         sub = sorted_data[sorted_data['Class / family'] == cls]
         if sub.empty:
