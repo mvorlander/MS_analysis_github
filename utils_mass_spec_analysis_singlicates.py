@@ -254,83 +254,83 @@ class MassSpecPreprocessing:
             print(self.merged_data.columns.tolist())
 
     def run_preprocessing(self):
-    """
-    Execute the entire preprocessing workflow, including:
-      - Preliminary directory checks (with a reminder)
-      - Package installation
-      - Mass spec data loading
-      - Abundance column detection
-      - Widget-based renaming
-      - "Apply & Rebuild" button creation
-    """
-    # --- PRELIMINARY CHECKS ---
-    # Remind the user where the file should be located (but do not interrupt processing)
-    if not self.mass_spec_file_path.startswith(self.required_path):
-        print("WARNING: The mass spec file should be stored in the shared directory:")
-        print(self.required_path)
-        print("Continuing processing...")
+        """
+        Execute the entire preprocessing workflow, including:
+        - Preliminary directory checks (with a reminder)
+        - Package installation
+        - Mass spec data loading
+        - Abundance column detection
+        - Widget-based renaming
+        - "Apply & Rebuild" button creation
+        """
+        # --- PRELIMINARY CHECKS ---
+        # Remind the user where the file should be located (but do not interrupt processing)
+        if not self.mass_spec_file_path.startswith(self.required_path):
+            print("WARNING: The mass spec file should be stored in the shared directory:")
+            print(self.required_path)
+            print("Continuing processing...")
 
-    # --- INSTALL REQUIRED PACKAGES ---
-    required_packages = [
-        'networkx', 'numpy', 'matplotlib', 'seaborn', 'plotly', 'mplcursors',
-        'mpld3', 'ipympl', 'kaleido', 'PyPDF2', 'statsmodels'
-    ]
-    self.install_packages(required_packages)
+        # --- INSTALL REQUIRED PACKAGES ---
+        required_packages = [
+            'networkx', 'numpy', 'matplotlib', 'seaborn', 'plotly', 'mplcursors',
+            'mpld3', 'ipympl', 'kaleido', 'PyPDF2', 'statsmodels'
+        ]
+        self.install_packages(required_packages)
 
-    # --- LOAD MASS SPEC DATA ---
-    print("Loading data, please be patient...")
-    self.mass_spec_data_full_headers = pd.read_excel(
-        self.mass_spec_file_path, sheet_name='Main', header=None, nrows=5
-    )
+        # --- LOAD MASS SPEC DATA ---
+        print("Loading data, please be patient...")
+        self.mass_spec_data_full_headers = pd.read_excel(
+            self.mass_spec_file_path, sheet_name='Main', header=None, nrows=5
+        )
 
-    # Identify the abundance columns
-    row_for_labels = 3  # row index in the raw header lines
-    area_norm_column_indices = [
-        idx for idx, cell in enumerate(self.mass_spec_data_full_headers.iloc[row_for_labels])
-        if any(ab_text in str(cell) for ab_text in self.abundance_column_label)
-    ]
+        # Identify the abundance columns
+        row_for_labels = 3  # row index in the raw header lines
+        area_norm_column_indices = [
+            idx for idx, cell in enumerate(self.mass_spec_data_full_headers.iloc[row_for_labels])
+            if any(ab_text in str(cell) for ab_text in self.abundance_column_label)
+        ]
 
-    # Extract sample names from the row above
-    self.sample_names_extracted = [
-        self.mass_spec_data_full_headers.iloc[row_for_labels - 1, idx]
-        for idx in area_norm_column_indices
-    ]
+        # Extract sample names from the row above
+        self.sample_names_extracted = [
+            self.mass_spec_data_full_headers.iloc[row_for_labels - 1, idx]
+            for idx in area_norm_column_indices
+        ]
 
-    # Load the main data with multi-level headers
-    self.mass_spec_data = pd.read_excel(self.mass_spec_file_path, sheet_name='Main', header=[3, 4])
+        # Load the main data with multi-level headers
+        self.mass_spec_data = pd.read_excel(self.mass_spec_file_path, sheet_name='Main', header=[3, 4])
 
-    # Get the columns by letter
-    self.genes_column, genes_colname = self.get_column_by_letter(self.mass_spec_data, self.genes_col_letter)
-    self.accession_column, accession_colname = self.get_column_by_letter(self.mass_spec_data, self.accession_col_letter)
-    self.description_column, description_colname = self.get_column_by_letter(self.mass_spec_data, self.description_col_letter)
+        # Get the columns by letter
+        self.genes_column, genes_colname = self.get_column_by_letter(self.mass_spec_data, self.genes_col_letter)
+        self.accession_column, accession_colname = self.get_column_by_letter(self.mass_spec_data, self.accession_col_letter)
+        self.description_column, description_colname = self.get_column_by_letter(self.mass_spec_data, self.description_col_letter)
 
-    print("\nPreview of the specified columns:")
-    print(self.mass_spec_data[[genes_colname, accession_colname, description_colname]].head(10))
-    print("\nPlease check carefully that the 'Genes', 'Accession', and 'Description' columns above are correct.")
-    print("Proceeding automatically without user confirmation...\n")
+        print("\nPreview of the specified columns:")
+        print(self.mass_spec_data[[genes_colname, accession_colname, description_colname]].head(10))
+        print("\nPlease check carefully that the 'Genes', 'Accession', and 'Description' columns above are correct.")
+        print("Proceeding automatically without user confirmation...\n")
 
-    # --- DETECT ABUNDANCE COLUMNS ---
-    self.area_norm_columns = [
-        col for col in self.mass_spec_data.columns
-        if any(ab_text in col[0] for ab_text in self.abundance_column_label)
-    ]
-    print("Detected abundance columns:")
-    for col in self.area_norm_columns:
-        print("   ", col)
+        # --- DETECT ABUNDANCE COLUMNS ---
+        self.area_norm_columns = [
+            col for col in self.mass_spec_data.columns
+            if any(ab_text in col[0] for ab_text in self.abundance_column_label)
+        ]
+        print("Detected abundance columns:")
+        for col in self.area_norm_columns:
+            print("   ", col)
 
-    print("\nThese columns correspond to sample names:")
-    for idx, (col, sname) in enumerate(zip(self.area_norm_columns, self.sample_names_extracted)):
-        print(f"[{idx}] {col} -> {sname}")
+        print("\nThese columns correspond to sample names:")
+        for idx, (col, sname) in enumerate(zip(self.area_norm_columns, self.sample_names_extracted)):
+            print(f"[{idx}] {col} -> {sname}")
 
-    # --- WIDGET-BASED RENAMING ---
-    print("\nLaunching the renaming widget UI...\n")
-    self.rename_samples_with_widgets_always(self.sample_names_extracted)
+        # --- WIDGET-BASED RENAMING ---
+        print("\nLaunching the renaming widget UI...\n")
+        self.rename_samples_with_widgets_always(self.sample_names_extracted)
 
-    # --- APPLY THE NEW NAMES & REBUILD DATA ---
-    self.apply_button.on_click(self.on_apply_button_clicked)
-    display(self.apply_button, self.apply_output)
-    print("Widget-based renaming logic initialized. Please rename samples")
-    print(" and then click 'Save Sample Names', and DO NOT FORGET TO CLICK 'Apply New Names & Rebuild Data'.\n")
+        # --- APPLY THE NEW NAMES & REBUILD DATA ---
+        self.apply_button.on_click(self.on_apply_button_clicked)
+        display(self.apply_button, self.apply_output)
+        print("Widget-based renaming logic initialized. Please rename samples")
+        print(" and then click 'Save Sample Names', and DO NOT FORGET TO CLICK 'Apply New Names & Rebuild Data'.\n")
 
 
 
